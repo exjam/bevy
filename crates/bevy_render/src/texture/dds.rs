@@ -2,7 +2,7 @@ use ddsfile::{D3DFormat, Dds, DxgiFormat};
 use std::io::Cursor;
 use wgpu::{Extent3d, TextureDimension, TextureFormat};
 
-use super::{CompressedImageFormats, Image, TextureError};
+use super::{CompressedImageFormats, Image, TextureError, TranscodeFormat};
 
 pub fn dds_buffer_to_image(
     buffer: &[u8],
@@ -10,8 +10,79 @@ pub fn dds_buffer_to_image(
     is_srgb: bool,
 ) -> Result<Image, TextureError> {
     let mut cursor = Cursor::new(buffer);
-    let dds = Dds::read(&mut cursor).expect("Failed to parse DDS file");
-    let texture_format = dds_format_to_texture_format(&dds, is_srgb)?;
+    let mut dds = Dds::read(&mut cursor).expect("Failed to parse DDS file");
+    let texture_format = match dds_format_to_texture_format(&dds, is_srgb) {
+        Ok(texture_format) => texture_format,
+        Err(TextureError::FormatRequiresTranscodingError(transcode_format)) => {
+            let (format, data) = match transcode_format {
+                TranscodeFormat::A1r5g5b5 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(2)
+                        .flat_map(|rgb| {
+                            let rgb = rgb[0] as u32 | ((rgb[1] as u32) << 8);
+                            let b = rgb & 0b11111;
+                            let g = (rgb >> 5) & 0b11111;
+                            let r = (rgb >> 10) & 0b11111;
+                            let a = (rgb >> 15) & 0b1;
+                            [
+                                ((b * 527 + 23) >> 6) as u8,
+                                ((g * 527 + 23) >> 6) as u8,
+                                ((r * 527 + 23) >> 6) as u8,
+                                (a * 255) as u8,
+                            ]
+                        })
+                        .collect(),
+                ),
+                TranscodeFormat::R5g6b5 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(2)
+                        .flat_map(|rgb| {
+                            let rgb = rgb[0] as u32 | ((rgb[1] as u32) << 8);
+                            let b = rgb & 0b11111;
+                            let g = (rgb >> 5) & 0b111111;
+                            let r = (rgb >> 11) & 0b11111;
+                            [
+                                ((b * 527 + 23) >> 6) as u8,
+                                ((g * 259 + 33) >> 6) as u8,
+                                ((r * 527 + 23) >> 6) as u8,
+                                0xFF,
+                            ]
+                        })
+                        .collect(),
+                ),
+                TranscodeFormat::Rgb8 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(3)
+                        .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 0xff])
+                        .collect(),
+                ),
+                _ => {
+                    return Err(TextureError::UnsupportedTextureFormat(format!(
+                        "{:?}",
+                        transcode_format
+                    )));
+                }
+            };
+            dds.data = data;
+            format
+        }
+        Err(err) => return Err(err),
+    };
     if !supported_compressed_formats.supports(texture_format) {
         return Err(TextureError::UnsupportedTextureFormat(format!(
             "Format not supported by this GPU: {:?}",
@@ -47,6 +118,16 @@ pub fn dds_format_to_texture_format(
 ) -> Result<TextureFormat, TextureError> {
     Ok(if let Some(d3d_format) = dds.get_d3d_format() {
         match d3d_format {
+            D3DFormat::A1R5G5B5 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::A1r5g5b5,
+                ));
+            }
+            D3DFormat::R5G6B5 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::R5g6b5,
+                ));
+            }
             D3DFormat::A8B8G8R8 => {
                 if is_srgb {
                     TextureFormat::Rgba8UnormSrgb
@@ -61,6 +142,11 @@ pub fn dds_format_to_texture_format(
                 } else {
                     TextureFormat::Bgra8Unorm
                 }
+            }
+            D3DFormat::R8G8B8 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::Rgb8,
+                ));
             }
             D3DFormat::G16R16 => TextureFormat::Rg16Uint,
             D3DFormat::A2B10G10R10 => TextureFormat::Rgb10a2Unorm,
@@ -110,14 +196,11 @@ pub fn dds_format_to_texture_format(
                     TextureFormat::Bc3RgbaUnorm
                 }
             }
-            D3DFormat::A1R5G5B5
-            | D3DFormat::R5G6B5
             // FIXME: Map to argb format and user has to know to ignore the alpha channel?
             | D3DFormat::X8R8G8B8
             // FIXME: Map to argb format and user has to know to ignore the alpha channel?
             | D3DFormat::X8B8G8R8
             | D3DFormat::A2R10G10B10
-            | D3DFormat::R8G8B8
             | D3DFormat::X1R5G5B5
             | D3DFormat::A4R4G4B4
             | D3DFormat::X4R4G4B4
