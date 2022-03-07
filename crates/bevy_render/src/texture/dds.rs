@@ -10,8 +10,16 @@ pub fn dds_buffer_to_image(
     is_srgb: bool,
 ) -> Result<Image, TextureError> {
     let mut cursor = Cursor::new(buffer);
-    let dds = Dds::read(&mut cursor).expect("Failed to parse DDS file");
-    let texture_format = dds_format_to_texture_format(&dds, is_srgb)?;
+    let mut dds = Dds::read(&mut cursor).expect("Failed to parse DDS file");
+    let texture_format = match dds_format_to_texture_format(&dds, is_srgb) {
+        Ok(texture_format) => texture_format,
+        Err(TextureError::UnsupportedTextureFormat(_)) => {
+            let (format, data) = dds_try_convert_unsupported_format(&dds, is_srgb)?;
+            dds.data = data;
+            format
+        }
+        Err(err) => return Err(err),
+    };
     if !supported_compressed_formats.supports(texture_format) {
         return Err(TextureError::UnsupportedTextureFormat(format!(
             "Format not supported by this GPU: {:?}",
@@ -335,4 +343,40 @@ pub fn dds_format_to_texture_format(
             "unspecified".to_string(),
         ));
     })
+}
+
+pub fn dds_try_convert_unsupported_format(
+    dds: &Dds,
+    is_srgb: bool,
+) -> Result<(TextureFormat, Vec<u8>), TextureError> {
+    if let Some(d3d_format) = dds.get_d3d_format() {
+        match d3d_format {
+            D3DFormat::R8G8B8 => {
+                let elements = dds.data.len() / 3;
+                let mut converted = Vec::with_capacity(elements * 4);
+                for rgb in dds.data.chunks_exact(3) {
+                    converted.push(rgb[0]);
+                    converted.push(rgb[1]);
+                    converted.push(rgb[2]);
+                    converted.push(0xFF);
+                }
+                Ok((
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    converted,
+                ))
+            }
+            _ => Err(TextureError::UnsupportedTextureFormat(format!(
+                "{:?}",
+                d3d_format
+            ))),
+        }
+    } else {
+        Err(TextureError::UnsupportedTextureFormat(
+            "unspecified".to_string(),
+        ))
+    }
 }
