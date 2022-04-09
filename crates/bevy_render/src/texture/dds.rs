@@ -15,6 +15,29 @@ pub fn dds_buffer_to_image(
         Ok(texture_format) => texture_format,
         Err(TextureError::FormatRequiresTranscodingError(transcode_format)) => {
             let (format, data) = match transcode_format {
+                TranscodeFormat::A1r5g5b5 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(2)
+                        .flat_map(|rgb| {
+                            let rgb = rgb[0] as u32 | ((rgb[1] as u32) << 8);
+                            let b = rgb & 0b11111;
+                            let g = (rgb >> 5) & 0b11111;
+                            let r = (rgb >> 10) & 0b11111;
+                            let a = (rgb >> 15) & 0b1;
+                            [
+                                ((b * 527 + 23) >> 6) as u8,
+                                ((g * 527 + 23) >> 6) as u8,
+                                ((r * 527 + 23) >> 6) as u8,
+                                (a * 255) as u8,
+                            ]
+                        })
+                        .collect(),
+                ),
                 TranscodeFormat::R5g6b5 => (
                     if is_srgb {
                         TextureFormat::Bgra8UnormSrgb
@@ -95,6 +118,11 @@ pub fn dds_format_to_texture_format(
 ) -> Result<TextureFormat, TextureError> {
     Ok(if let Some(d3d_format) = dds.get_d3d_format() {
         match d3d_format {
+            D3DFormat::A1R5G5B5 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::A1r5g5b5,
+                ));
+            }
             D3DFormat::R5G6B5 => {
                 return Err(TextureError::FormatRequiresTranscodingError(
                     TranscodeFormat::R5g6b5,
@@ -168,7 +196,6 @@ pub fn dds_format_to_texture_format(
                     TextureFormat::Bc3RgbaUnorm
                 }
             }
-            D3DFormat::A1R5G5B5
             // FIXME: Map to argb format and user has to know to ignore the alpha channel?
             | D3DFormat::X8R8G8B8
             // FIXME: Map to argb format and user has to know to ignore the alpha channel?
