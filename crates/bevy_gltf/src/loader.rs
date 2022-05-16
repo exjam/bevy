@@ -746,8 +746,6 @@ fn load_node(
 
                 node.insert(Camera {
                     projection_matrix: orthographic_projection.get_projection_matrix(),
-                    near: orthographic_projection.near,
-                    far: orthographic_projection.far,
                     ..Default::default()
                 });
                 node.insert(orthographic_projection);
@@ -767,8 +765,6 @@ fn load_node(
                 }
                 node.insert(Camera {
                     projection_matrix: perspective_projection.get_projection_matrix(),
-                    near: perspective_projection.near,
-                    far: perspective_projection.far,
                     ..Default::default()
                 });
                 node.insert(perspective_projection);
