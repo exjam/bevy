@@ -222,11 +222,11 @@ pub fn check_visibility(
                         radius: (Vec3A::from(transform.scale) * model_aabb.half_extents).length(),
                     };
                     // Do quick sphere-based frustum culling
-                    if !frustum.intersects_sphere(&model_sphere, false) {
+                    if !frustum.intersects_sphere(&model_sphere, true) {
                         return;
                     }
                     // If we have an aabb, do aabb-based frustum culling
-                    if !frustum.intersects_obb(model_aabb, &model, false) {
+                    if !frustum.intersects_obb(model_aabb, &model, true) {
                         return;
                     }
                 }
