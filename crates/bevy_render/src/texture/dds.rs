@@ -60,6 +60,35 @@ pub fn dds_buffer_to_image(
                         })
                         .collect(),
                 ),
+                TranscodeFormat::A4r4g4b4 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    {
+                        let lookup_table_4bit = [
+                            0u8, 16, 32, 49, 65, 82, 98, 115,
+                            139, 156, 172, 189, 205, 222, 238, 255,
+                        ];
+                        dds.data
+                        .chunks_exact(2)
+                        .flat_map(|rgb| {
+                            let rgb = rgb[0] as u32 | ((rgb[1] as u32) << 8);
+                            let b = rgb & 0b1111;
+                            let g = (rgb >> 4) & 0b1111;
+                            let r = (rgb >> 8) & 0b1111;
+                            let a = (rgb >> 12) & 0b1111;
+                            [
+                                lookup_table_4bit[b as usize] as u8,
+                                lookup_table_4bit[g as usize] as u8,
+                                lookup_table_4bit[r as usize] as u8,
+                                lookup_table_4bit[a as usize] as u8,
+                            ]
+                        })
+                        .collect()
+                    },
+                ),
                 TranscodeFormat::Rgb8 => (
                     if is_srgb {
                         TextureFormat::Bgra8UnormSrgb
@@ -128,6 +157,11 @@ pub fn dds_format_to_texture_format(
                     TranscodeFormat::R5g6b5,
                 ));
             }
+            D3DFormat::A4R4G4B4 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::A4r4g4b4,
+                ));
+            }
             D3DFormat::A8B8G8R8 => {
                 if is_srgb {
                     TextureFormat::Rgba8UnormSrgb
@@ -188,7 +222,6 @@ pub fn dds_format_to_texture_format(
             | D3DFormat::X8B8G8R8
             | D3DFormat::A2R10G10B10
             | D3DFormat::X1R5G5B5
-            | D3DFormat::A4R4G4B4
             | D3DFormat::X4R4G4B4
             | D3DFormat::A8R3G3B2
             | D3DFormat::A4L4
