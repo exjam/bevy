@@ -437,6 +437,7 @@ pub enum TranscodeFormat {
     Rgb8,
     A1r5g5b5,
     R5g6b5,
+    A4r4g4b4,
     Uastc(DataFormat),
 }
 
