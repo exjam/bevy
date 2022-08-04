@@ -435,7 +435,9 @@ pub enum TranscodeFormat {
     Etc1s,
     // Has to be transcoded to Rgba8 for use with `wgpu`
     Rgb8,
+    Xrgb8,
     A1r5g5b5,
+    X1r5g5b5,
     R5g6b5,
     A4r4g4b4,
     Uastc(DataFormat),

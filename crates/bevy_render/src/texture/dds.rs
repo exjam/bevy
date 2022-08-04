@@ -38,6 +38,28 @@ pub fn dds_buffer_to_image(
                         })
                         .collect(),
                 ),
+                TranscodeFormat::X1r5g5b5 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(2)
+                        .flat_map(|rgb| {
+                            let rgb = rgb[0] as u32 | ((rgb[1] as u32) << 8);
+                            let b = rgb & 0b11111;
+                            let g = (rgb >> 5) & 0b11111;
+                            let r = (rgb >> 10) & 0b11111;
+                            [
+                                ((b * 527 + 23) >> 6) as u8,
+                                ((g * 527 + 23) >> 6) as u8,
+                                ((r * 527 + 23) >> 6) as u8,
+                                255 as u8,
+                            ]
+                        })
+                        .collect(),
+                ),
                 TranscodeFormat::R5g6b5 => (
                     if is_srgb {
                         TextureFormat::Bgra8UnormSrgb
@@ -100,6 +122,17 @@ pub fn dds_buffer_to_image(
                         .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 0xff])
                         .collect(),
                 ),
+                TranscodeFormat::Xrgb8 => (
+                    if is_srgb {
+                        TextureFormat::Bgra8UnormSrgb
+                    } else {
+                        TextureFormat::Bgra8Unorm
+                    },
+                    dds.data
+                        .chunks_exact(4)
+                        .flat_map(|rgb| [rgb[3], rgb[2], rgb[1], 0xff])
+                        .collect(),
+                ),
                 _ => {
                     return Err(TextureError::UnsupportedTextureFormat(format!(
                         "{:?}",
@@ -153,6 +186,11 @@ pub fn dds_format_to_texture_format(
                     TranscodeFormat::A1r5g5b5,
                 ));
             }
+            D3DFormat::X1R5G5B5 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::X1r5g5b5,
+                ));
+            }
             D3DFormat::R5G6B5 => {
                 return Err(TextureError::FormatRequiresTranscodingError(
                     TranscodeFormat::R5g6b5,
@@ -181,6 +219,11 @@ pub fn dds_format_to_texture_format(
             D3DFormat::R8G8B8 => {
                 return Err(TextureError::FormatRequiresTranscodingError(
                     TranscodeFormat::Rgb8,
+                ));
+            }
+            D3DFormat::X8R8G8B8 => {
+                return Err(TextureError::FormatRequiresTranscodingError(
+                    TranscodeFormat::Xrgb8,
                 ));
             }
             D3DFormat::G16R16 => TextureFormat::Rg16Uint,
@@ -218,11 +261,8 @@ pub fn dds_format_to_texture_format(
             D3DFormat::G32R32F => TextureFormat::Rg32Float,
             D3DFormat::A32B32G32R32F => TextureFormat::Rgba32Float,
             // FIXME: Map to argb format and user has to know to ignore the alpha channel?
-            | D3DFormat::X8R8G8B8
-            // FIXME: Map to argb format and user has to know to ignore the alpha channel?
-            | D3DFormat::X8B8G8R8
+            D3DFormat::X8B8G8R8
             | D3DFormat::A2R10G10B10
-            | D3DFormat::X1R5G5B5
             | D3DFormat::X4R4G4B4
             | D3DFormat::A8R3G3B2
             | D3DFormat::A4L4
