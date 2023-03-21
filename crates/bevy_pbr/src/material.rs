@@ -105,6 +105,8 @@ use std::marker::PhantomData;
 /// var color_sampler: sampler;
 /// ```
 pub trait Material: AsBindGroup + Send + Sync + Clone + TypeUuid + Sized + 'static {
+    type PipelineData: FromWorld + Send + Sync + Clone + Sized;
+
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {
@@ -205,8 +207,8 @@ where
                         .in_set(RenderSet::Prepare)
                         .after(PrepareAssetSet::PreAssetPrepare),
                 )
-                .add_system(render::queue_shadows::<M>.in_set(RenderLightSystems::QueueShadows))
-                .add_system(queue_material_meshes::<M>.in_set(RenderSet::Queue));
+                .add_system(render::queue_shadows::<M, DrawPrepass<M>>.in_set(RenderLightSystems::QueueShadows))
+                .add_system(queue_material_meshes::<M, DrawMaterial<M>>.in_set(RenderSet::Queue));
         }
 
         // PrepassPipelinePlugin is required for shadow mapping and the optional PrepassPlugin
@@ -264,6 +266,7 @@ pub struct MaterialPipeline<M: Material> {
     pub material_layout: BindGroupLayout,
     pub vertex_shader: Option<Handle<Shader>>,
     pub fragment_shader: Option<Handle<Shader>>,
+    pub data: M::PipelineData,
     marker: PhantomData<M>,
 }
 
@@ -274,6 +277,7 @@ impl<M: Material> Clone for MaterialPipeline<M> {
             material_layout: self.material_layout.clone(),
             vertex_shader: self.vertex_shader.clone(),
             fragment_shader: self.fragment_shader.clone(),
+            data: self.data.clone(),
             marker: PhantomData,
         }
     }
@@ -324,12 +328,13 @@ impl<M: Material> FromWorld for MaterialPipeline<M> {
                 ShaderRef::Handle(handle) => Some(handle),
                 ShaderRef::Path(path) => Some(asset_server.load(path)),
             },
+            data: M::PipelineData::from_world(world),
             marker: PhantomData,
         }
     }
 }
 
-type DrawMaterial<M> = (
+pub type DrawMaterial<M> = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMaterialBindGroup<M, 1>,
@@ -359,7 +364,7 @@ impl<P: PhaseItem, M: Material, const I: usize> RenderCommand<P> for SetMaterial
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn queue_material_meshes<M: Material>(
+pub fn queue_material_meshes<M: Material, D: 'static>(
     opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
     alpha_mask_draw_functions: Res<DrawFunctions<AlphaMask3d>>,
     transparent_draw_functions: Res<DrawFunctions<Transparent3d>>,
@@ -395,9 +400,9 @@ pub fn queue_material_meshes<M: Material>(
         mut transparent_phase,
     ) in &mut views
     {
-        let draw_opaque_pbr = opaque_draw_functions.read().id::<DrawMaterial<M>>();
-        let draw_alpha_mask_pbr = alpha_mask_draw_functions.read().id::<DrawMaterial<M>>();
-        let draw_transparent_pbr = transparent_draw_functions.read().id::<DrawMaterial<M>>();
+        let draw_opaque_pbr = opaque_draw_functions.read().id::<D>();
+        let draw_alpha_mask_pbr = alpha_mask_draw_functions.read().id::<D>();
+        let draw_transparent_pbr = transparent_draw_functions.read().id::<D>();
 
         let mut view_key = MeshPipelineKey::from_msaa_samples(msaa.samples())
             | MeshPipelineKey::from_hdr(view.hdr);
