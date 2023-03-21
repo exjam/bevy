@@ -1,10 +1,9 @@
 use crate::{
     directional_light_order, point_light_order, AlphaMode, AmbientLight, Cascade,
     CascadeShadowConfig, Cascades, CascadesVisibleEntities, Clusters, CubemapVisibleEntities,
-    DirectionalLight, DirectionalLightShadowMap, DrawPrepass, EnvironmentMapLight,
-    GlobalVisiblePointLights, Material, MaterialPipelineKey, MeshPipeline, MeshPipelineKey,
-    NotShadowCaster, PointLight, PointLightShadowMap, PrepassPipeline, RenderMaterials, SpotLight,
-    VisiblePointLights,
+    DirectionalLight, DirectionalLightShadowMap, EnvironmentMapLight, GlobalVisiblePointLights,
+    Material, MaterialPipelineKey, MeshPipeline, MeshPipelineKey, NotShadowCaster, PointLight,
+    PointLightShadowMap, PrepassPipeline, RenderMaterials, SpotLight, VisiblePointLights,
 };
 use bevy_asset::Handle;
 use bevy_core_pipeline::core_3d::Transparent3d;
@@ -1544,7 +1543,7 @@ pub fn prepare_clusters(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn queue_shadows<M: Material>(
+pub fn queue_shadows<M: Material, D: 'static>(
     shadow_draw_functions: Res<DrawFunctions<Shadow>>,
     prepass_pipeline: Res<PrepassPipeline<M>>,
     casting_meshes: Query<(&Handle<Mesh>, &Handle<M>), Without<NotShadowCaster>>,
@@ -1561,7 +1560,7 @@ pub fn queue_shadows<M: Material>(
     M::Data: PartialEq + Eq + Hash + Clone,
 {
     for (entity, view_lights) in &view_lights {
-        let draw_shadow_mesh = shadow_draw_functions.read().id::<DrawPrepass<M>>();
+        let draw_shadow_mesh = shadow_draw_functions.read().id::<D>();
         for view_light_entity in view_lights.lights.iter().copied() {
             let (light_entity, mut shadow_phase) =
                 view_light_shadow_phases.get_mut(view_light_entity).unwrap();
