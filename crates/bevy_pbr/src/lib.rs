@@ -188,7 +188,7 @@ impl Plugin for PbrPlugin {
             .init_resource::<PointLightShadowMap>()
             .add_plugins((
                 MeshRenderPlugin,
-                MaterialPlugin::<StandardMaterial> {
+                MaterialPlugin::<StandardMaterial, DrawMaterial<StandardMaterial>, DrawPrepass<StandardMaterial>> {
                     prepass_enabled: self.prepass_enabled,
                     ..Default::default()
                 },
