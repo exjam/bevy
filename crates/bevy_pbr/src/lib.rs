@@ -165,7 +165,7 @@ impl Plugin for PbrPlugin {
             .register_type::<PointLightShadowMap>()
             .register_type::<SpotLight>()
             .add_plugin(MeshRenderPlugin)
-            .add_plugin(MaterialPlugin::<StandardMaterial> {
+            .add_plugin(MaterialPlugin::<StandardMaterial, DrawMaterial<StandardMaterial>, DrawPrepass<StandardMaterial>> {
                 prepass_enabled: self.prepass_enabled,
                 ..Default::default()
             })
