@@ -1,5 +1,5 @@
 use crate::{
-    render, AlphaMode, DrawMesh, DrawPrepass, EnvironmentMapLight, MeshPipeline, MeshPipelineKey,
+    render, AlphaMode, DrawMesh, EnvironmentMapLight, MeshPipeline, MeshPipelineKey,
     MeshUniform, PrepassPipelinePlugin, PrepassPlugin, RenderLightSystems,
     ScreenSpaceAmbientOcclusionSettings, SetMeshBindGroup, SetMeshViewBindGroup, Shadow,
 };
@@ -16,7 +16,7 @@ use bevy_ecs::{
     prelude::*,
     system::{
         lifetimeless::{Read, SRes},
-        SystemParamItem,
+        SystemParamItem, ReadOnlySystemParam,
     },
 };
 use bevy_reflect::{TypePath, TypeUuid};
@@ -107,6 +107,8 @@ use std::marker::PhantomData;
 /// var color_sampler: sampler;
 /// ```
 pub trait Material: AsBindGroup + Send + Sync + Clone + TypeUuid + TypePath + Sized {
+    type PipelineData: FromWorld + Send + Sync + Clone + Sized;
+
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {
@@ -163,28 +165,36 @@ pub trait Material: AsBindGroup + Send + Sync + Clone + TypeUuid + TypePath + Si
 
 /// Adds the necessary ECS resources and render logic to enable rendering entities using the given [`Material`]
 /// asset type.
-pub struct MaterialPlugin<M: Material> {
+pub struct MaterialPlugin<M: Material, D: 'static, P: 'static> {
     /// Controls if the prepass is enabled for the Material.
     /// For more information about what a prepass is, see the [`bevy_core_pipeline::prepass`] docs.
     ///
     /// When it is enabled, it will automatically add the [`PrepassPlugin`]
     /// required to make the prepass work on this Material.
     pub prepass_enabled: bool,
-    pub _marker: PhantomData<M>,
+    pub _marker_m: PhantomData<M>,
+    pub _marker_d: PhantomData<D>,
+    pub _marker_p: PhantomData<P>,
 }
 
-impl<M: Material> Default for MaterialPlugin<M> {
+impl<M: Material, D: 'static, P: 'static> Default for MaterialPlugin<M, D, P> {
     fn default() -> Self {
         Self {
             prepass_enabled: true,
-            _marker: Default::default(),
+            _marker_m: Default::default(),
+            _marker_d: Default::default(),
+            _marker_p: Default::default(),
         }
     }
 }
 
-impl<M: Material> Plugin for MaterialPlugin<M>
+impl<M: Material, D: RenderCommand<Transparent3d> + RenderCommand<Opaque3d> + RenderCommand<AlphaMask3d> + Send + Sync + 'static, P: RenderCommand<Shadow> + Send + Sync + 'static> Plugin for MaterialPlugin<M, D, P>
 where
     M::Data: PartialEq + Eq + Hash + Clone,
+    <P as RenderCommand<Shadow>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<Transparent3d>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<Opaque3d>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<AlphaMask3d>>::Param: ReadOnlySystemParam,
 {
     fn build(&self, app: &mut App) {
         app.add_asset::<M>()
@@ -193,10 +203,10 @@ where
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<DrawFunctions<Shadow>>()
-                .add_render_command::<Shadow, DrawPrepass<M>>()
-                .add_render_command::<Transparent3d, DrawMaterial<M>>()
-                .add_render_command::<Opaque3d, DrawMaterial<M>>()
-                .add_render_command::<AlphaMask3d, DrawMaterial<M>>()
+                .add_render_command::<Shadow, P>()
+                .add_render_command::<Transparent3d, D>()
+                .add_render_command::<Opaque3d, D>()
+                .add_render_command::<AlphaMask3d, D>()
                 .init_resource::<ExtractedMaterials<M>>()
                 .init_resource::<RenderMaterials<M>>()
                 .init_resource::<SpecializedMeshPipelines<MaterialPipeline<M>>>()
@@ -207,8 +217,8 @@ where
                         prepare_materials::<M>
                             .in_set(RenderSet::Prepare)
                             .after(PrepareAssetSet::PreAssetPrepare),
-                        render::queue_shadows::<M>.in_set(RenderLightSystems::QueueShadows),
-                        queue_material_meshes::<M>.in_set(RenderSet::Queue),
+                        render::queue_shadows::<M, P>.in_set(RenderLightSystems::QueueShadows),
+                        queue_material_meshes::<M, D>.in_set(RenderSet::Queue),
                     ),
                 );
         }
@@ -274,6 +284,7 @@ pub struct MaterialPipeline<M: Material> {
     pub material_layout: BindGroupLayout,
     pub vertex_shader: Option<Handle<Shader>>,
     pub fragment_shader: Option<Handle<Shader>>,
+    pub data: M::PipelineData,
     marker: PhantomData<M>,
 }
 
@@ -284,6 +295,7 @@ impl<M: Material> Clone for MaterialPipeline<M> {
             material_layout: self.material_layout.clone(),
             vertex_shader: self.vertex_shader.clone(),
             fragment_shader: self.fragment_shader.clone(),
+            data: self.data.clone(),
             marker: PhantomData,
         }
     }
@@ -334,12 +346,13 @@ impl<M: Material> FromWorld for MaterialPipeline<M> {
                 ShaderRef::Handle(handle) => Some(handle),
                 ShaderRef::Path(path) => Some(asset_server.load(path)),
             },
+            data: M::PipelineData::from_world(world),
             marker: PhantomData,
         }
     }
 }
 
-type DrawMaterial<M> = (
+pub type DrawMaterial<M> = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMaterialBindGroup<M, 1>,
@@ -369,7 +382,7 @@ impl<P: PhaseItem, M: Material, const I: usize> RenderCommand<P> for SetMaterial
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn queue_material_meshes<M: Material>(
+pub fn queue_material_meshes<M: Material, D: 'static>(
     opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
     alpha_mask_draw_functions: Res<DrawFunctions<AlphaMask3d>>,
     transparent_draw_functions: Res<DrawFunctions<Transparent3d>>,
@@ -411,9 +424,9 @@ pub fn queue_material_meshes<M: Material>(
         mut transparent_phase,
     ) in &mut views
     {
-        let draw_opaque_pbr = opaque_draw_functions.read().id::<DrawMaterial<M>>();
-        let draw_alpha_mask_pbr = alpha_mask_draw_functions.read().id::<DrawMaterial<M>>();
-        let draw_transparent_pbr = transparent_draw_functions.read().id::<DrawMaterial<M>>();
+        let draw_opaque_pbr = opaque_draw_functions.read().id::<D>();
+        let draw_alpha_mask_pbr = alpha_mask_draw_functions.read().id::<D>();
+        let draw_transparent_pbr = transparent_draw_functions.read().id::<D>();
 
         let mut view_key = MeshPipelineKey::from_msaa_samples(msaa.samples())
             | MeshPipelineKey::from_hdr(view.hdr);
