@@ -14,7 +14,7 @@ use bevy_ecs::{
     prelude::*,
     system::{
         lifetimeless::{Read, SRes},
-        SystemParamItem,
+        SystemParamItem, ReadOnlySystemParam,
     },
 };
 use bevy_reflect::TypeUuid;
@@ -163,28 +163,36 @@ pub trait Material: AsBindGroup + Send + Sync + Clone + TypeUuid + Sized + 'stat
 
 /// Adds the necessary ECS resources and render logic to enable rendering entities using the given [`Material`]
 /// asset type.
-pub struct MaterialPlugin<M: Material> {
+pub struct MaterialPlugin<M: Material, D: 'static, P: 'static> {
     /// Controls if the prepass is enabled for the Material.
     /// For more information about what a prepass is, see the [`bevy_core_pipeline::prepass`] docs.
     ///
     /// When it is enabled, it will automatically add the [`PrepassPlugin`]
     /// required to make the prepass work on this Material.
     pub prepass_enabled: bool,
-    pub _marker: PhantomData<M>,
+    pub _marker_m: PhantomData<M>,
+    pub _marker_d: PhantomData<D>,
+    pub _marker_p: PhantomData<P>,
 }
 
-impl<M: Material> Default for MaterialPlugin<M> {
+impl<M: Material, D: 'static, P: 'static> Default for MaterialPlugin<M, D, P> {
     fn default() -> Self {
         Self {
             prepass_enabled: true,
-            _marker: Default::default(),
+            _marker_m: Default::default(),
+            _marker_d: Default::default(),
+            _marker_p: Default::default(),
         }
     }
 }
 
-impl<M: Material> Plugin for MaterialPlugin<M>
+impl<M: Material, D: RenderCommand<Transparent3d> + RenderCommand<Opaque3d> + RenderCommand<AlphaMask3d> + Send + Sync + 'static, P: RenderCommand<Shadow> + Send + Sync + 'static> Plugin for MaterialPlugin<M, D, P>
 where
     M::Data: PartialEq + Eq + Hash + Clone,
+    <P as RenderCommand<Shadow>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<Transparent3d>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<Opaque3d>>::Param: ReadOnlySystemParam,
+    <D as RenderCommand<AlphaMask3d>>::Param: ReadOnlySystemParam,
 {
     fn build(&self, app: &mut App) {
         app.add_asset::<M>()
@@ -193,10 +201,10 @@ where
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<DrawFunctions<Shadow>>()
-                .add_render_command::<Shadow, DrawPrepass<M>>()
-                .add_render_command::<Transparent3d, DrawMaterial<M>>()
-                .add_render_command::<Opaque3d, DrawMaterial<M>>()
-                .add_render_command::<AlphaMask3d, DrawMaterial<M>>()
+                .add_render_command::<Shadow, P>()
+                .add_render_command::<Transparent3d, D>()
+                .add_render_command::<Opaque3d, D>()
+                .add_render_command::<AlphaMask3d, D>()
                 .init_resource::<MaterialPipeline<M>>()
                 .init_resource::<ExtractedMaterials<M>>()
                 .init_resource::<RenderMaterials<M>>()
@@ -207,8 +215,8 @@ where
                         .in_set(RenderSet::Prepare)
                         .after(PrepareAssetSet::PreAssetPrepare),
                 )
-                .add_system(render::queue_shadows::<M, DrawPrepass<M>>.in_set(RenderLightSystems::QueueShadows))
-                .add_system(queue_material_meshes::<M, DrawMaterial<M>>.in_set(RenderSet::Queue));
+                .add_system(render::queue_shadows::<M, P>.in_set(RenderLightSystems::QueueShadows))
+                .add_system(queue_material_meshes::<M, D>.in_set(RenderSet::Queue));
         }
 
         // PrepassPipelinePlugin is required for shadow mapping and the optional PrepassPlugin
