@@ -511,7 +511,7 @@ fn prepare_view_targets(
                     main_texture_format,
                     main_texture: main_textures.main_texture.clone(),
                     out_texture: out_texture_view.clone(),
-                    out_texture_format: out_texture_format.add_srgb_suffix(),
+                    out_texture_format: out_texture_format,
                 });
             }
         }
