@@ -126,6 +126,6 @@ pub trait BevyDefault {
 
 impl BevyDefault for wgpu::TextureFormat {
     fn bevy_default() -> Self {
-        wgpu::TextureFormat::Rgba8UnormSrgb
+        wgpu::TextureFormat::Rgba8Unorm
     }
 }
