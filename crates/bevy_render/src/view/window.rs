@@ -77,7 +77,7 @@ pub struct ExtractedWindow {
 impl ExtractedWindow {
     fn set_swapchain_texture(&mut self, frame: wgpu::SurfaceTexture) {
         let texture_view_descriptor = TextureViewDescriptor {
-            format: Some(frame.texture.format().add_srgb_suffix()),
+            format: Some(frame.texture.format()),
             ..default()
         };
         self.swap_chain_texture_view = Some(TextureView::from(
@@ -248,8 +248,8 @@ pub fn prepare_windows(
                 let mut format = *formats.get(0).expect("No supported formats for surface");
                 for available_format in formats {
                     // Rgba8UnormSrgb and Bgra8UnormSrgb and the only sRGB formats wgpu exposes that we can use for surfaces.
-                    if available_format == TextureFormat::Rgba8UnormSrgb
-                        || available_format == TextureFormat::Bgra8UnormSrgb
+                    if available_format == TextureFormat::Rgba8Unorm
+                        || available_format == TextureFormat::Bgra8Unorm
                     {
                         format = available_format;
                         break;
@@ -280,7 +280,7 @@ pub fn prepare_windows(
                 CompositeAlphaMode::Inherit => wgpu::CompositeAlphaMode::Inherit,
             },
             view_formats: if !surface_data.format.is_srgb() {
-                vec![surface_data.format.add_srgb_suffix()]
+                vec![surface_data.format]
             } else {
                 vec![]
             },
@@ -378,7 +378,7 @@ pub fn prepare_windows(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: surface_configuration.format.add_srgb_suffix(),
+                format: surface_configuration.format,
                 usage: TextureUsages::RENDER_ATTACHMENT
                     | TextureUsages::COPY_SRC
                     | TextureUsages::TEXTURE_BINDING,
