@@ -197,8 +197,8 @@ pub fn prepare_windows(
                 let mut format = *formats.get(0).expect("No supported formats for surface");
                 for available_format in formats {
                     // Rgba8UnormSrgb and Bgra8UnormSrgb and the only sRGB formats wgpu exposes that we can use for surfaces.
-                    if available_format == TextureFormat::Rgba8UnormSrgb
-                        || available_format == TextureFormat::Bgra8UnormSrgb
+                    if available_format == TextureFormat::Rgba8Unorm
+                        || available_format == TextureFormat::Bgra8Unorm
                     {
                         format = available_format;
                         break;
