@@ -60,7 +60,7 @@ impl AssetLoader for ImageTextureLoader {
                 bytes,
                 ImageType::Extension(ext),
                 self.supported_compressed_formats,
-                true,
+                false,
             )
             .map_err(|err| FileTextureError {
                 error: err,
