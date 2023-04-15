@@ -189,7 +189,7 @@ pub(crate) fn changed_window(
             }
 
             if window.cursor.icon != cache.window.cursor.icon {
-                winit_window.set_cursor_icon(converters::convert_cursor_icon(window.cursor.icon));
+                winit_window.set_cursor_icon(converters::convert_cursor_icon(&window.cursor.icon));
             }
 
             if window.cursor.grab_mode != cache.window.cursor.grab_mode {
