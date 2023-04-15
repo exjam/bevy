@@ -1,14 +1,54 @@
+use std::sync::Arc;
+
 use bevy_reflect::{prelude::ReflectDefault, FromReflect, Reflect};
 
 #[cfg(feature = "serialize")]
 use bevy_reflect::{ReflectDeserialize, ReflectSerialize};
+
+/// CursorIcon::Custom
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Reflect, FromReflect)]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    reflect(Serialize, Deserialize)
+)]
+#[reflect(Debug, PartialEq, Default)]
+pub struct CursorIconCustom {
+    /// X coordinate of cursor image hotspot
+    pub hotspot_x: u32,
+
+    /// Y coordinate of cursor image hotspot
+    pub hotspot_y: u32,
+
+    /// Width of cursor image
+    pub width: u32,
+
+    /// Height of cursor image
+    pub height: u32,
+
+    /// Pixels of cursor image in ARGB
+    #[reflect(ignore)]
+    pub data: Arc<[u8]>,
+}
+
+impl Default for CursorIconCustom {
+    fn default() -> Self {
+        Self {
+            hotspot_x: Default::default(),
+            hotspot_y: Default::default(),
+            width: Default::default(),
+            height: Default::default(),
+            data: Arc::new([]),
+        }
+    }
+}
 
 /// The icon to display for a window's cursor.
 ///
 /// Examples of all of these cursors can be found [here](https://www.w3schools.com/cssref/playit.asp?filename=playcss_cursor).
 /// This `enum` is simply a copy of a similar `enum` found in [`winit`](https://docs.rs/winit/latest/winit/window/enum.CursorIcon.html).
 /// `winit`, in turn, mostly copied cursor types available in the browser.
-#[derive(Default, Debug, Hash, PartialEq, Eq, Clone, Copy, Reflect, FromReflect)]
+#[derive(Default, Debug, Hash, PartialEq, Eq, Clone, Reflect, FromReflect)]
 #[cfg_attr(
     feature = "serialize",
     derive(serde::Serialize, serde::Deserialize),
@@ -19,26 +59,26 @@ pub enum CursorIcon {
     /// The platform-dependent default cursor.
     #[default]
     Default,
-    /// A simple crosshair.   
+    /// A simple crosshair.
     Crosshair,
-    /// A hand (often used to indicate links in web browsers).    
+    /// A hand (often used to indicate links in web browsers).
     Hand,
-    /// An arrow. This is the default cursor on most systems.    
+    /// An arrow. This is the default cursor on most systems.
     Arrow,
-    /// Indicates something is to be moved.    
+    /// Indicates something is to be moved.
     Move,
-    /// Indicates text that may be selected or edited.    
+    /// Indicates text that may be selected or edited.
     Text,
-    /// Program busy indicator.    
+    /// Program busy indicator.
     Wait,
-    /// Help indicator (often rendered as a "?")    
+    /// Help indicator (often rendered as a "?")
     Help,
     /// Progress indicator. Shows that processing is being done.
     ///
     /// But in contrast with "Wait" the user may still interact with the program.
-    /// Often rendered as a spinning beach ball, or an arrow with a watch or hourglass.    
+    /// Often rendered as a spinning beach ball, or an arrow with a watch or hourglass.
     Progress,
-    /// Cursor showing that something cannot be done.    
+    /// Cursor showing that something cannot be done.
     NotAllowed,
     /// Indicates that a context menu is available.
     ContextMenu,
@@ -90,4 +130,6 @@ pub enum CursorIcon {
     ColResize,
     /// Indicates that the row can be resized vertically.
     RowResize,
+    /// Indicates that a custom cursor image should be used.
+    Custom(CursorIconCustom),
 }

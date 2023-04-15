@@ -145,7 +145,7 @@ pub struct Window {
     /// The "html canvas" element selector.
     ///
     /// If set, this selector will be used to find a matching html canvas element,
-    /// rather than creating a new one.   
+    /// rather than creating a new one.
     /// Uses the [CSS selector format](https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector).
     ///
     /// This value has no effect on non-web platforms.
@@ -359,7 +359,7 @@ impl WindowResizeConstraints {
 }
 
 /// Stores data about the window's cursor.
-#[derive(Debug, Copy, Clone, Reflect, FromReflect)]
+#[derive(Debug, Clone, Reflect, FromReflect)]
 #[cfg_attr(
     feature = "serialize",
     derive(serde::Serialize, serde::Deserialize),
