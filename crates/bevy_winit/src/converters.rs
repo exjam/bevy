@@ -227,7 +227,7 @@ pub fn convert_virtual_key_code(virtual_key_code: winit::event::VirtualKeyCode) 
     }
 }
 
-pub fn convert_cursor_icon(cursor_icon: CursorIcon) -> winit::window::CursorIcon {
+pub fn convert_cursor_icon(cursor_icon: &CursorIcon) -> winit::window::CursorIcon {
     match cursor_icon {
         CursorIcon::Default => winit::window::CursorIcon::Default,
         CursorIcon::Crosshair => winit::window::CursorIcon::Crosshair,
@@ -264,6 +264,15 @@ pub fn convert_cursor_icon(cursor_icon: CursorIcon) -> winit::window::CursorIcon
         CursorIcon::NwseResize => winit::window::CursorIcon::NwseResize,
         CursorIcon::ColResize => winit::window::CursorIcon::ColResize,
         CursorIcon::RowResize => winit::window::CursorIcon::RowResize,
+        CursorIcon::Custom(custom) => {
+            winit::window::CursorIcon::Custom(winit::window::CursorIconCustom {
+                hotspot_x: custom.hotspot_x,
+                hotspot_y: custom.hotspot_y,
+                width: custom.width,
+                height: custom.height,
+                data: custom.data.clone(),
+            })
+        }
     }
 }
 
